@@ -23,11 +23,16 @@ FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 # Copy the built JAR from build stage
-# Spring Boot creates an executable JAR - copy the largest JAR (usually the executable one)
+# HAPI FHIR starter creates a JAR like: hapi-fhir-jpaserver-starter-*-SNAPSHOT.jar or similar
+# Copy the JAR that's not sources or javadoc (the executable one)
 RUN cd /app/target && \
-    find . -name "*.jar" ! -name "*sources.jar" ! -name "*javadoc.jar" -type f -exec ls -lh {} \; | \
-    sort -k5 -hr | head -1 | awk '{print $NF}' > /tmp/jarfile.txt && \
-    JARFILE=$(cat /tmp/jarfile.txt) && \
+    JARFILE=$(ls -1 *.jar 2>/dev/null | grep -v sources | grep -v javadoc | head -1) && \
+    if [ -z "$JARFILE" ]; then \
+        echo "Error: No executable JAR found in target directory"; \
+        ls -la /app/target/; \
+        exit 1; \
+    fi && \
+    echo "Using JAR: $JARFILE" && \
     cp "$JARFILE" /app/target/app.jar
 COPY --from=build /app/target/app.jar app.jar
 

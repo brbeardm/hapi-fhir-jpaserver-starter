@@ -89,10 +89,13 @@ hapi:
     partitioning:
       enabled: false
     
-    # Tester UI (disabled - can enable later if needed)
-    tester:
-      ui:
-        enabled: false
+    # Tester UI - REMOVED (completely remove to prevent bean creation)
+    # If you want to enable it later, add:
+    # tester:
+    #   server1:
+    #     name: "HAPI FHIR Server"
+    #     server_address: ${RAILWAY_PUBLIC_DOMAIN:http://localhost:8080}
+    #     fhir_version: R4
 
 # Logging
 logging:

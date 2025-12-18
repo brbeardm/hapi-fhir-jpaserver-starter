@@ -7,11 +7,12 @@ FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
 # Clone the HAPI FHIR JPA Server Starter repository
-RUN git clone https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git . && \
-    git checkout master
+# Note: Railway builds from your GitHub repo, so we use the repo Railway provides
+# The application.yaml is already in the repo at src/main/resources/application.yaml
+WORKDIR /app
 
-# Copy our custom application.yaml (will override default)
-COPY application.yaml src/main/resources/application.yaml
+# Copy all files from build context (Railway provides the cloned repo)
+COPY . .
 
 # Build the application
 RUN mvn clean install -DskipTests

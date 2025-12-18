@@ -38,6 +38,11 @@ spring:
         implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
     show-sql: false
 
+  # Disable Flyway - PostgreSQL 17.7 is not supported yet
+  # Hibernate will handle schema creation with ddl-auto: update
+  flyway:
+    enabled: false
+
   # Server configuration
 server:
   port: ${PORT:8080}

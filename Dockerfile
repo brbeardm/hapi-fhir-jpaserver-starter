@@ -25,13 +25,9 @@ WORKDIR /app
 # Copy the built JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Create startup script
-RUN echo '#!/bin/sh' > /start.sh && \
-    echo 'set -e' >> /start.sh && \
-    echo 'PORT=${PORT:-8080}' >> /start.sh && \
-    echo 'JAVA_OPTS=${JAVA_OPTS:--Xmx512m -Xms256m}' >> /start.sh && \
-    echo 'exec java $JAVA_OPTS -jar app.jar --server.port=$PORT' >> /start.sh && \
-    chmod +x /start.sh
+# Copy startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 # Expose port (Railway will set PORT env var, but HAPI defaults to 8080)
 EXPOSE 8080

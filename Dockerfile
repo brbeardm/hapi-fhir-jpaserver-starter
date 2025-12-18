@@ -1,50 +1,38 @@
-FROM docker.io/library/maven:3.9.9-eclipse-temurin-17 AS build-hapi
-WORKDIR /tmp/hapi-fhir-jpaserver-starter
+# HAPI FHIR JPA Server - Dockerfile for Railway
+# Based on: https://github.com/hapifhir/hapi-fhir-jpaserver-starter
 
-ARG OPENTELEMETRY_JAVA_AGENT_VERSION=2.13.1
-RUN curl -LSsO https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OPENTELEMETRY_JAVA_AGENT_VERSION}/opentelemetry-javaagent.jar
+FROM maven:3.9-eclipse-temurin-17 AS build
 
-COPY pom.xml .
-COPY server.xml .
-RUN mvn -ntp dependency:go-offline
-
-COPY src/ /tmp/hapi-fhir-jpaserver-starter/src/
-RUN mvn clean install -DskipTests -Djdk.lang.Process.launchMechanism=vfork
-
-FROM build-hapi AS build-distroless
-RUN mvn package -DskipTests spring-boot:repackage -Pboot
-RUN mkdir /app && cp /tmp/hapi-fhir-jpaserver-starter/target/ROOT.war /app/main.war
-
-
-########### bitnami tomcat version is suitable for debugging and comes with a shell
-########### it can be built using eg. `docker build --target tomcat .`
-FROM docker.io/bitnamilegacy/tomcat:10.1.43-debian-12-r0 AS tomcat
-
-USER root
-RUN rm -rf /opt/bitnami/tomcat/webapps/ROOT && \
-    mkdir -p /opt/bitnami/hapi/data/hapi/lucenefiles && \
-    chown -R 1001:1001 /opt/bitnami/hapi/data/hapi/lucenefiles && \
-    chmod 775 /opt/bitnami/hapi/data/hapi/lucenefiles
-
-RUN mkdir -p /target && chown -R 1001:1001 target
-USER 1001
-
-COPY --chown=1001:1001 catalina.properties /opt/bitnami/tomcat/conf/catalina.properties
-COPY --chown=1001:1001 server.xml /opt/bitnami/tomcat/conf/server.xml
-COPY --from=build-hapi --chown=1001:1001 /tmp/hapi-fhir-jpaserver-starter/target/ROOT.war /opt/bitnami/tomcat/webapps/ROOT.war
-COPY --from=build-hapi --chown=1001:1001 /tmp/hapi-fhir-jpaserver-starter/opentelemetry-javaagent.jar /app
-
-ENV ALLOW_EMPTY_PASSWORD=yes
-
-########### distroless brings focus on security and runs on plain spring boot - this is the default image
-FROM gcr.io/distroless/java17-debian12:nonroot AS default
-# 65532 is the nonroot user's uid
-# used here instead of the name to allow Kubernetes to easily detect that the container
-# is running as a non-root (uid != 0) user.
-USER 65532:65532
+# Set working directory
 WORKDIR /app
 
-COPY --chown=nonroot:nonroot --from=build-distroless /app /app
-COPY --chown=nonroot:nonroot --from=build-hapi /tmp/hapi-fhir-jpaserver-starter/opentelemetry-javaagent.jar /app
+# Clone the HAPI FHIR JPA Server Starter repository
+RUN git clone https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git . && \
+    git checkout master
 
-ENTRYPOINT ["java", "--class-path", "/app/main.war", "-Dloader.path=main.war!/WEB-INF/classes/,main.war!/WEB-INF/,/app/extra-classes", "org.springframework.boot.loader.PropertiesLauncher"]
+# Copy our custom application.yaml (will override default)
+COPY application.yaml src/main/resources/application.yaml
+
+# Build the application
+RUN mvn clean install -DskipTests
+
+# Runtime stage
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+# Copy the built JAR from build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose port (Railway will set PORT env var, but HAPI defaults to 8080)
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/fhir/metadata || exit 1
+
+# Run the application
+# HAPI FHIR reads PORT from environment or defaults to 8080
+ENV JAVA_OPTS="-Xmx512m -Xms256m"
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar --server.port=${PORT:-8080}"]
+

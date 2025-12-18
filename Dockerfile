@@ -23,7 +23,13 @@ FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 # Copy the built JAR from build stage
-COPY --from=build /app/target/*.jar app.jar
+# Spring Boot creates an executable JAR - copy the largest JAR (usually the executable one)
+RUN cd /app/target && \
+    find . -name "*.jar" ! -name "*sources.jar" ! -name "*javadoc.jar" -type f -exec ls -lh {} \; | \
+    sort -k5 -hr | head -1 | awk '{print $NF}' > /tmp/jarfile.txt && \
+    JARFILE=$(cat /tmp/jarfile.txt) && \
+    cp "$JARFILE" /app/target/app.jar
+COPY --from=build /app/target/app.jar app.jar
 
 # Copy startup script
 COPY start.sh /start.sh

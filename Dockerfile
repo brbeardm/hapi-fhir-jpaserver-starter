@@ -15,17 +15,23 @@ WORKDIR /app
 COPY . .
 
 # Build the application
-# Use package and spring-boot:repackage to ensure executable JAR is created
 RUN mvn clean package spring-boot:repackage -DskipTests
 
-# Find and prepare the JAR in build stage
-# Use ROOT-classes.jar (it's the compiled classes) - we'll run it with explicit main class
+# Find and prepare the executable JAR/WAR in build stage
+# Project creates ROOT.war or ROOT-classes.jar - we need the WAR with dependencies
 RUN cd /app/target && \
-    echo "=== Listing all JARs ===" && \
-    ls -lh *.jar 2>/dev/null || true && \
+    echo "=== Listing all files in target ===" && \
+    ls -lah && \
     echo "" && \
-    echo "=== Finding JAR to use ===" && \
-    # Look for JAR with Main-Class first \
+    echo "=== Looking for executable WAR or JAR ===" && \
+    # First, try to find ROOT.war (Spring Boot executable WAR) \
+    if [ -f "ROOT.war" ]; then \
+        echo "✅ Found ROOT.war" && \
+        cp ROOT.war /app/target/app.jar && \
+        echo "✅ Copied ROOT.war to app.jar" && \
+        exit 0; \
+    fi && \
+    # Look for JAR with Main-Class \
     EXECUTABLE_JAR="" && \
     for jar in *.jar; do \
         if [ -f "$jar" ] && ! echo "$jar" | grep -qE "(sources|javadoc)"; then \
@@ -37,22 +43,20 @@ RUN cd /app/target && \
             fi; \
         fi; \
     done && \
-    # If no executable JAR, use ROOT-classes.jar (we'll run with explicit main class) \
-    if [ -z "$EXECUTABLE_JAR" ]; then \
-        echo "⚠️ No JAR with Main-Class found, using ROOT-classes.jar with explicit main class" && \
-        EXECUTABLE_JAR="ROOT-classes.jar" && \
-        if [ ! -f "$EXECUTABLE_JAR" ]; then \
-            EXECUTABLE_JAR=$(ls -1S *.jar 2>/dev/null | grep -v sources | grep -v javadoc | head -1); \
+    if [ -n "$EXECUTABLE_JAR" ]; then \
+        cp "$EXECUTABLE_JAR" /app/target/app.jar && \
+        echo "✅ Copied $EXECUTABLE_JAR to app.jar"; \
+    else \
+        echo "⚠️ No executable WAR/JAR found, using ROOT-classes.jar (will need dependencies)" && \
+        if [ -f "ROOT-classes.jar" ]; then \
+            cp ROOT-classes.jar /app/target/app.jar && \
+            echo "✅ Copied ROOT-classes.jar to app.jar"; \
+        else \
+            echo "❌ Error: No JAR/WAR found"; \
+            ls -la; \
+            exit 1; \
         fi; \
-    fi && \
-    if [ -z "$EXECUTABLE_JAR" ] || [ ! -f "$EXECUTABLE_JAR" ]; then \
-        echo "❌ Error: No JAR found"; \
-        ls -la *.jar 2>/dev/null || true; \
-        exit 1; \
-    fi && \
-    echo "Using JAR: $EXECUTABLE_JAR" && \
-    cp "$EXECUTABLE_JAR" /app/target/app.jar && \
-    echo "✅ Copied $EXECUTABLE_JAR to app.jar"
+    fi
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine

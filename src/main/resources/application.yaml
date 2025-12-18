@@ -2,6 +2,10 @@
 # This file overrides the default application.yaml in the starter project
 
 spring:
+  # Allow circular references (required for HAPI FHIR)
+  main:
+    allow-circular-references: true
+  
   datasource:
     # Railway provides DATABASE_URL as: postgresql://user:pass@host:port/dbname
     # Spring Boot needs jdbc:postgresql://host:port/dbname
@@ -95,11 +99,16 @@ hapi:
 # Logging
 logging:
   level:
+    root: INFO
     ca.uhn.fhir: INFO
-    org.springframework: INFO
+    org.springframework: WARN
+    org.springframework.boot: INFO
     org.hibernate: WARN
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    ch.qos.logback: WARN  # Reduce Logback configuration noise
+    org.apache.catalina: WARN
+    org.apache.tomcat: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
 

@@ -18,24 +18,34 @@ COPY . .
 RUN mvn clean install -DskipTests
 
 # Find and prepare the executable JAR in build stage
-# Spring Boot creates a "fat JAR" with all dependencies - it's usually the largest one
-# Or we can check for Main-Class in the manifest
+# Spring Boot creates a "fat JAR" with all dependencies - find the one with Main-Class
 RUN cd /app/target && \
-    echo "Listing all JARs:" && \
+    echo "=== Listing all JARs ===" && \
     ls -lh *.jar 2>/dev/null || true && \
     echo "" && \
-    echo "Finding executable JAR (largest non-sources/javadoc JAR):" && \
+    echo "=== Finding JAR with Main-Class ===" && \
+    for jar in *.jar; do \
+        if [ -f "$jar" ] && ! echo "$jar" | grep -qE "(sources|javadoc)"; then \
+            echo "Checking $jar..." && \
+            if unzip -p "$jar" META-INF/MANIFEST.MF 2>/dev/null | grep -qi "Main-Class"; then \
+                echo "✅ Found executable JAR: $jar" && \
+                MAIN_CLASS=$(unzip -p "$jar" META-INF/MANIFEST.MF 2>/dev/null | grep -i "Main-Class" | cut -d: -f2 | tr -d '\r\n ') && \
+                echo "   Main-Class: $MAIN_CLASS" && \
+                cp "$jar" /app/target/app.jar && \
+                echo "   Copied to app.jar" && \
+                exit 0; \
+            fi; \
+        fi; \
+    done && \
+    echo "⚠️ No JAR with Main-Class found, trying largest JAR..." && \
     JARFILE=$(ls -1S *.jar 2>/dev/null | grep -v sources | grep -v javadoc | head -1) && \
     if [ -z "$JARFILE" ]; then \
-        echo "Error: No executable JAR found in target directory"; \
+        echo "❌ Error: No JAR found in target directory"; \
         ls -la /app/target/; \
         exit 1; \
     fi && \
-    echo "Selected JAR: $JARFILE" && \
-    echo "Checking for Main-Class in manifest:" && \
-    unzip -p "$JARFILE" META-INF/MANIFEST.MF 2>/dev/null | grep -i "Main-Class" || echo "WARNING: No Main-Class found in manifest" && \
-    cp "$JARFILE" /app/target/app.jar && \
-    echo "Copied $JARFILE to app.jar"
+    echo "Using largest JAR: $JARFILE" && \
+    cp "$JARFILE" /app/target/app.jar
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine

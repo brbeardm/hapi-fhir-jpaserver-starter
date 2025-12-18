@@ -89,13 +89,10 @@ hapi:
     partitioning:
       enabled: false
     
-    # Tester UI (enable for demos)
+    # Tester UI (disabled - can enable later if needed)
     tester:
       ui:
-        enabled: true
-        home: /fhir
-        server-address: ${RAILWAY_PUBLIC_DOMAIN:http://localhost:8080}
-        server-name: HAPI FHIR Server
+        enabled: false
 
 # Logging
 logging:

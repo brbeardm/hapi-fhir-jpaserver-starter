@@ -17,14 +17,7 @@ COPY . .
 # Build the application
 RUN mvn clean install -DskipTests
 
-# Runtime stage
-FROM eclipse-temurin:17-jre-alpine
-
-WORKDIR /app
-
-# Copy the built JAR from build stage
-# HAPI FHIR starter creates a JAR like: hapi-fhir-jpaserver-starter-*-SNAPSHOT.jar or similar
-# Copy the JAR that's not sources or javadoc (the executable one)
+# Find and prepare the executable JAR in build stage
 RUN cd /app/target && \
     JARFILE=$(ls -1 *.jar 2>/dev/null | grep -v sources | grep -v javadoc | head -1) && \
     if [ -z "$JARFILE" ]; then \
@@ -34,6 +27,13 @@ RUN cd /app/target && \
     fi && \
     echo "Using JAR: $JARFILE" && \
     cp "$JARFILE" /app/target/app.jar
+
+# Runtime stage
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+# Copy the built JAR from build stage
 COPY --from=build /app/target/app.jar app.jar
 
 # Copy startup script

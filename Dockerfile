@@ -18,18 +18,17 @@ COPY . .
 # Use package and spring-boot:repackage to ensure executable JAR is created
 RUN mvn clean package spring-boot:repackage -DskipTests
 
-# Find and prepare the executable JAR in build stage
-# After spring-boot:repackage, the executable JAR should be created
+# Find and prepare the JAR in build stage
+# Use ROOT-classes.jar (it's the compiled classes) - we'll run it with explicit main class
 RUN cd /app/target && \
     echo "=== Listing all JARs ===" && \
     ls -lh *.jar 2>/dev/null || true && \
     echo "" && \
-    echo "=== Finding Spring Boot executable JAR ===" && \
+    echo "=== Finding JAR to use ===" && \
+    # Look for JAR with Main-Class first \
     EXECUTABLE_JAR="" && \
-    # First, try to find JAR with Main-Class (the executable one) \
     for jar in *.jar; do \
-        if [ -f "$jar" ]; then \
-            echo "Checking $jar..." && \
+        if [ -f "$jar" ] && ! echo "$jar" | grep -qE "(sources|javadoc)"; then \
             if unzip -p "$jar" META-INF/MANIFEST.MF 2>/dev/null | grep -qi "Main-Class"; then \
                 MAIN_CLASS=$(unzip -p "$jar" META-INF/MANIFEST.MF 2>/dev/null | grep -i "Main-Class" | cut -d: -f2 | tr -d '\r\n ') && \
                 echo "✅ Found executable JAR: $jar (Main-Class: $MAIN_CLASS)" && \
@@ -38,33 +37,22 @@ RUN cd /app/target && \
             fi; \
         fi; \
     done && \
-    # If no JAR with Main-Class, try largest JAR (excluding sources/javadoc) \
+    # If no executable JAR, use ROOT-classes.jar (we'll run with explicit main class) \
     if [ -z "$EXECUTABLE_JAR" ]; then \
-        echo "⚠️ No JAR with Main-Class found, trying largest JAR..." && \
-        EXECUTABLE_JAR=$(ls -1S *.jar 2>/dev/null | grep -v sources | grep -v javadoc | head -1); \
-        if [ -n "$EXECUTABLE_JAR" ]; then \
-            echo "Using largest JAR: $EXECUTABLE_JAR" && \
-            echo "⚠️ WARNING: This JAR may not have Main-Class - checking..." && \
-            if ! unzip -p "$EXECUTABLE_JAR" META-INF/MANIFEST.MF 2>/dev/null | grep -qi "Main-Class"; then \
-                echo "❌ ERROR: $EXECUTABLE_JAR does not have Main-Class!" && \
-                echo "This JAR cannot be executed. Available JARs:" && \
-                ls -la *.jar 2>/dev/null || true && \
-                exit 1; \
-            fi; \
+        echo "⚠️ No JAR with Main-Class found, using ROOT-classes.jar with explicit main class" && \
+        EXECUTABLE_JAR="ROOT-classes.jar" && \
+        if [ ! -f "$EXECUTABLE_JAR" ]; then \
+            EXECUTABLE_JAR=$(ls -1S *.jar 2>/dev/null | grep -v sources | grep -v javadoc | head -1); \
         fi; \
     fi && \
     if [ -z "$EXECUTABLE_JAR" ] || [ ! -f "$EXECUTABLE_JAR" ]; then \
-        echo "❌ Error: No executable JAR found"; \
-        echo "Available JARs:"; \
+        echo "❌ Error: No JAR found"; \
         ls -la *.jar 2>/dev/null || true; \
         exit 1; \
     fi && \
     echo "Using JAR: $EXECUTABLE_JAR" && \
     cp "$EXECUTABLE_JAR" /app/target/app.jar && \
-    echo "✅ Copied $EXECUTABLE_JAR to app.jar" && \
-    echo "Verifying app.jar has Main-Class:" && \
-    unzip -p /app/target/app.jar META-INF/MANIFEST.MF 2>/dev/null | grep -i "Main-Class" && \
-    echo "✅ Verified: app.jar has Main-Class"
+    echo "✅ Copied $EXECUTABLE_JAR to app.jar"
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine
